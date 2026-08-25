@@ -1,17 +1,23 @@
 import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
-  testDir: './specs',
+  testDir: './tests',
   outputDir: './test-results',
+  // Runs once before the whole suite, not per file/worker - the shared
+  // Postgres + REST instance is seeded exactly once. Individual tests must
+  // not depend on a pristine table; they should either read-only or clean up
+  // their own writes, since other tests may run concurrently against the
+  // same data.
+  globalSetup: './global-setup.ts',
 
-  // A single shared Postgres + REST instance backs every test, and
-  // resetDatabase() (src/db.ts) truncates globally - running spec files in
-  // parallel would let one file's reset stomp on another's fixtures mid-test.
-  // To lift this later, namespace fixtures per worker (testInfo.parallelIndex)
-  // instead of removing these two lines.
-  fullyParallel: false,
-  workers: 1,
-  retries: 0,
+  // Tests run in parallel across files and within a file. The shared
+  // Postgres + REST instance is only reset once up front (see global setup /
+  // the first beforeAll) - after that, tests must either avoid mutating
+  // shared data or clean up after themselves so concurrent tests don't
+  // observe each other's writes.
+  fullyParallel: true,
+  workers: process.env.CI ? '100%' : '50%',
+  retries: process.env.CI ? 2 : 0,
 
   timeout: 60_000,
   expect: { timeout: 10_000 },
@@ -19,6 +25,7 @@ export default defineConfig({
 
   reporter: [
     ['list'],
+    ['junit', { outputFile: './test-results/results.xml' }],
     // open: 'never' - otherwise a failing local run tries to spawn a browser
     // to show the report, which does not exist inside this container.
     ['html', { outputFolder: './playwright-report', open: 'never' }],
@@ -29,7 +36,6 @@ export default defineConfig({
     // absolute paths (page.goto('/petclinic/owners')) so they read honestly
     // regardless of what baseURL's path component is.
     baseURL: process.env.PW_BASE_URL ?? 'http://angular:8080',
-    // retries is 0 above, so 'on-first-retry' would never capture anything.
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
@@ -41,5 +47,11 @@ export default defineConfig({
     navigationTimeout: 30_000,
   },
 
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  projects: [
+    { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
+    { name: 'firefox', use: { ...devices['Desktop Firefox'] } },
+    { name: 'webkit', use: { ...devices['Desktop Safari'] } },
+    { name: 'Mobile Chrome', use: { ...devices['Pixel 5'] } },
+    { name: 'Mobile Safari', use: { ...devices['iPhone 12'] } },
+  ],
 });

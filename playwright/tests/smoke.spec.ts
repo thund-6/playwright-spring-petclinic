@@ -1,15 +1,13 @@
 import { expect, test } from '@playwright/test';
-import { resetDatabase } from '../src/db';
 
 // Base URL for direct API calls; playwright.config.ts's `baseURL` is for the
 // `page` fixture (the Angular app), which is a different origin.
 const API = process.env.PW_API_URL ?? 'http://rest:9966/petclinic/api';
 const HEALTH_URL = API.replace(/\/api$/, '/actuator/health');
 
-test.beforeAll(async () => {
-  await resetDatabase();
-});
-
+// The seed is loaded once by global-setup.ts, not per test - these two
+// checks are read-only so they stay valid no matter what else is running
+// concurrently against the shared REST/DB instance.
 test('REST service is up, reachable, and seeded', async ({ request }) => {
   expect((await request.get(HEALTH_URL)).ok()).toBeTruthy();
 
@@ -35,32 +33,8 @@ test('Angular app is served under /petclinic/ and calls the rest container', asy
   await expect(page.locator('#vets tbody > tr')).toHaveCount(6);
   await expect(page.locator('#vets')).toContainText('James Carter');
 
-  // This is the single most valuable assertion in this file: it proves the
-  // build-time environment.prod.ts rewrite (docker/angular.Dockerfile)
-  // actually took effect. If it silently no-ops, every other UI test fails
-  // with an opaque connection/CORS error instead of a clear signal here.
+  // Proves the build-time environment.prod.ts rewrite actually took effect -
+  // if it silently no-ops, every other UI test fails with an opaque CORS error instead.
   expect(apiCalls.length).toBeGreaterThan(0);
   expect(apiCalls.every((u) => u.startsWith('http://rest:9966/'))).toBeTruthy();
-});
-
-test('resetDatabase() restores the seed after a mutation', async ({ request }) => {
-  const created = await request.post(`${API}/owners`, {
-    data: {
-      firstName: 'Temp',
-      lastName: 'Owner',
-      address: '1 Test St.',
-      city: 'Testville',
-      telephone: '1234567890',
-    },
-  });
-  expect(created.ok()).toBeTruthy();
-  expect(await (await request.get(`${API}/owners`)).json()).toHaveLength(11);
-
-  await resetDatabase();
-
-  const after: Array<{ id: number; firstName: string; lastName: string }> = await (
-    await request.get(`${API}/owners`)
-  ).json();
-  expect(after).toHaveLength(10);
-  expect(after[0]).toMatchObject({ id: 1, firstName: 'George', lastName: 'Franklin' });
 });

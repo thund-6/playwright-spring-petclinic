@@ -19,22 +19,9 @@ const TABLES = [
   'users',
 ];
 
-/**
- * Restores the canonical seed data (10 owners, 6 vets, 6 pet types,
- * 3 specialties, 13 pets, ...), so each test can start from a known state.
- *
- * RESTART IDENTITY is required for correctness, not just tidiness:
- * data.sql guards its inserts on explicit ids
- * (`... WHERE NOT EXISTS (SELECT * FROM vets WHERE id = 1)`), and
- * vet_specialties inserts explicit id pairs. Without resetting the identity
- * sequences, a replay against non-empty sequences re-inserts every row at a
- * fresh id, so e.g. GET /petclinic/api/owners/1 404s and vet<->specialty
- * links point at the wrong rows.
- *
- * Safe to do behind the running app's back: the REST service has no
- * @Cacheable / @EnableCaching / Hibernate second-level cache, so there is
- * nothing to invalidate.
- */
+// RESTART IDENTITY matters, not just tidies up: data.sql inserts guarded on
+// explicit ids, so a replay against non-reset sequences puts rows at the
+// wrong ids and breaks FK links (e.g. GET /owners/1 404s).
 export async function resetDatabase(): Promise<void> {
   const client = new Client(); // reads PGHOST/PGPORT/PGUSER/PGPASSWORD/PGDATABASE
   await client.connect();

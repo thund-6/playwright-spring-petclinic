@@ -9,31 +9,21 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-petclinic}
       TZ: ${TZ:-UTC}
       PGTZ: ${TZ:-UTC}
-    # Ephemeral PGDATA: `docker compose down` (or a fresh `up`) always starts
-    # from an empty database, so schema.sql runs exactly once per run - it
-    # can't accumulate the auto-named duplicate indexes that Postgres derives
-    # for schema.sql's unnamed `CREATE INDEX ON vets (last_name)` statements
-    # on repeated runs against a persisted volume.
+    # Ephemeral PGDATA: every `up` starts empty, so schema.sql can't
+    # accumulate duplicate auto-named indexes from repeated runs.
     tmpfs:
       - /var/lib/postgresql/data
-    # Seed straight from the submodule, read-only. Combined with
-    # SPRING_SQL_INIT_MODE=never on `rest` below, the DB is seeded once by
-    # Postgres itself, before the app ever connects - the idempotent
-    # WHERE NOT EXISTS / ON CONFLICT guards in data.sql are for repeated app
-    # restarts against a persistent DB, which we don't do here.
-    # NB: /docker-entrypoint-initdb.d only runs against an empty PGDATA - if
-    # you ever swap tmpfs for a named volume, seed edits stop taking effect
-    # until you `down -v`.
+    # Seeded once by Postgres itself via initdb.d, before the app connects
+    # (only runs against an empty PGDATA - swapping in a named volume needs
+    # `down -v` for seed edits to take effect).
     volumes:
       - ./spring-petclinic-rest/src/main/resources/db/postgres/schema.sql:/docker-entrypoint-initdb.d/10-schema.sql:ro
       - ./spring-petclinic-rest/src/main/resources/db/postgres/data.sql:/docker-entrypoint-initdb.d/20-data.sql:ro
     ports:
       - "${POSTGRES_HOST_PORT:-55432}:5432"
     healthcheck:
-      # -h 127.0.0.1 forces TCP. During initdb.d, Postgres runs a temporary
-      # server with listen_addresses='' that IS reachable over the unix
-      # socket, so a bare `pg_isready` can report healthy while seeding is
-      # still in progress. The row-count check makes "healthy" mean "seeded".
+      # -h 127.0.0.1 forces TCP so this can't report healthy against the
+      # initdb.d temp server; the row-count check makes "healthy" mean "seeded".
       test:
         - CMD-SHELL
         - >-
@@ -53,22 +43,19 @@ services:
         condition: service_healthy
     environment:
       SPRING_PROFILES_ACTIVE: postgres,spring-data-jpa
-      # application-postgres.properties reads POSTGRES_URL / POSTGRES_USER /
-      # POSTGRES_PASS (note: POSTGRES_PASS, NOT the postgres image's
-      # POSTGRES_PASSWORD above - same value, different variable name).
+      # POSTGRES_PASS, not POSTGRES_PASSWORD - same value, different var name
+      # than the postgres image above.
       POSTGRES_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-petclinic}
       POSTGRES_USER: ${POSTGRES_USER:-petclinic}
       POSTGRES_PASS: ${POSTGRES_PASSWORD:-petclinic}
-      # Env vars outrank application-postgres.properties' own
-      # spring.sql.init.mode=always - seeding is handled entirely by the
-      # postgres service's initdb.d scripts above.
+      # Overrides application-postgres.properties' spring.sql.init.mode=always -
+      # seeding is handled by postgres's initdb.d scripts above instead.
       SPRING_SQL_INIT_MODE: never
       TZ: ${TZ:-UTC}
       JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=75 -Duser.timezone=${TZ:-UTC}
     ports:
       - "${REST_HOST_PORT:-9966}:9966"
-    # Not unless-stopped: a crash-restart loop would silently re-run DDL and
-    # mask a real startup failure as "slow but eventually healthy".
+    # Not unless-stopped: a crash-restart loop would mask a real startup failure.
     restart: "no"
 
   angular:
@@ -76,18 +63,14 @@ services:
       context: .
       dockerfile: docker/angular.Dockerfile
       args:
-        # Baked into the image at build time - the app's REST_API_URL is a
-        # compile-time constant. Changing this needs `docker compose build
-        # angular` (or `up -d --build`), a plain `up` will not pick it up.
+        # Baked in at build time - changing these needs `docker compose build angular`.
         REST_API_URL: ${REST_API_URL:-http://rest:9966/petclinic/api/}
         BASE_HREF: ${BASE_HREF:-/petclinic/}
     ports:
       - "${ANGULAR_HOST_PORT:-8080}:8080"
     restart: "no"
 
-  # Not started by a plain `docker compose up` - only via the `tests` profile
-  # (`docker compose run --rm tests ...`, which auto-activates the profile of
-  # the service you name) or `docker compose --profile tests up`.
+  # Only starts via `docker compose run --rm tests ...` or `--profile tests up`.
   tests:
     profiles: ["tests"]
     build:
@@ -103,9 +86,8 @@ services:
       angular:
         condition: service_healthy
     user: "${UID:-1000}:${GID:-1000}"
-    working_dir: /work/tests
-    # Playwright's documented recommendation for Chromium; avoids exhausting
-    # the default 64MB /dev/shm on pages with lots of images/canvas.
+    working_dir: /work/playwright
+    # Avoids exhausting the default 64MB /dev/shm (Playwright's recommendation for Chromium).
     ipc: host
     environment:
       HOME: /home/tester
@@ -120,23 +102,16 @@ services:
       PGUSER: ${POSTGRES_USER:-petclinic}
       PGPASSWORD: ${POSTGRES_PASSWORD:-petclinic}
     volumes:
-      - ./tests:/work/tests
-      # Bind mount above shadows node_modules with the host's (usually
-      # empty/absent) copy; a named volume mounted on the longer, more
-      # specific path wins and keeps the container's install independent of
-      # whatever exists on the host.
-      - tests-node-modules:/work/tests/node_modules
-      # The only source-tree files the tests actually need at runtime: the
-      # canonical seed SQL, read-only, for resetDatabase(). (messages.properties
-      # is not mounted - MessageSource is never invoked anywhere in the REST
-      # app, so those strings never reach a response or the UI.)
+      - ./playwright:/work/playwright
+      # Named volume on the more specific path wins, keeping node_modules
+      # independent of whatever the bind mount above brings from the host.
+      - tests-node-modules:/work/playwright/node_modules
+      # Seed SQL for resetDatabase(), read-only.
       - ./spring-petclinic-rest/src/main/resources/db/postgres:/srv/seed:ro
-    # Only published when you pass --service-ports (needed for --ui mode,
-    # `show-report`, `show-trace`); a plain `run --rm tests ...` won't bind it.
+    # Only published with --service-ports (needed for --ui mode / show-report / show-trace).
     ports:
       - "${PW_UI_PORT:-9323}:9323"
-    # `npx --no` fails fast instead of trying to network-install playwright
-    # if the node_modules volume is ever empty.
+    # `npx --no` fails fast instead of network-installing playwright if the volume is empty.
     command: ["npx", "--no", "playwright", "test"]
 
 volumes:
