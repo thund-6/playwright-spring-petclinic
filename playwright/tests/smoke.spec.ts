@@ -33,8 +33,11 @@ test('Angular app is served under /petclinic/ and calls the rest container', asy
   await expect(page.locator('#vets tbody > tr')).toHaveCount(6);
   await expect(page.locator('#vets')).toContainText('James Carter');
 
-  // Proves the build-time environment.prod.ts rewrite actually took effect -
-  // if it silently no-ops, every other UI test fails with an opaque CORS error instead.
+  // Proves the app calls the REST API same-origin, through nginx's
+  // /petclinic/api/ proxy (docker/nginx.conf) - not cross-origin at
+  // http://rest:9966/ directly, which a host browser can't resolve and
+  // which would otherwise surface as an opaque CORS error.
   expect(apiCalls.length).toBeGreaterThan(0);
-  expect(apiCalls.every((u) => u.startsWith('http://rest:9966/'))).toBeTruthy();
+  expect(apiCalls.every((u) => u.includes('/petclinic/api/'))).toBeTruthy();
+  expect(apiCalls.every((u) => !u.startsWith('http://rest:9966/'))).toBeTruthy();
 });

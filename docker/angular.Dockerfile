@@ -27,7 +27,7 @@ ARG NODE_IMAGE=node:24-bookworm-slim
 ARG NGINX_IMAGE=nginx:1.29-alpine
 
 FROM ${NODE_IMAGE} AS build
-ARG REST_API_URL=http://rest:9966/petclinic/api/
+ARG REST_API_URL=/petclinic/api/
 ARG BASE_HREF=/petclinic/
 ENV CI=1 NG_CLI_ANALYTICS=false
 WORKDIR /workspace

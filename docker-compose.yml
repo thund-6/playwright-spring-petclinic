@@ -59,12 +59,20 @@ services:
     restart: "no"
 
   angular:
+    depends_on:
+      rest:
+        condition: service_healthy
     build:
       context: .
       dockerfile: docker/angular.Dockerfile
       args:
         # Baked in at build time - changing these needs `docker compose build angular`.
-        REST_API_URL: ${REST_API_URL:-http://rest:9966/petclinic/api/}
+        # Relative, not http://rest:9966/... - the browser (human on localhost:8080,
+        # or Playwright on angular:8080) must hit its own origin so nginx's
+        # /petclinic/api/ proxy (see docker/nginx.conf) can forward to rest:9966
+        # from inside the compose network. An absolute rest:9966 URL only
+        # resolves for callers already on that network, not a host browser.
+        REST_API_URL: ${REST_API_URL:-/petclinic/api/}
         BASE_HREF: ${BASE_HREF:-/petclinic/}
     ports:
       - "${ANGULAR_HOST_PORT:-8080}:8080"

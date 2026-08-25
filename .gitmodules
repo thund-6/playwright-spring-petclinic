@@ -3,4 +3,4 @@
 	url = https://github.com/spring-petclinic/spring-petclinic-rest.git
 [submodule "spring-petclinic-angular"]
 	path = spring-petclinic-angular
-	url = https://github.com/spring-petclinic/spring-petclinic-angular.git
+	url = https://github.com/thund-6/spring-petclinic-angular.git
