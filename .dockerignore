@@ -1,0 +1,28 @@
+# Build context is the repository root for all three Dockerfiles.
+#
+# **/node_modules is load-bearing: docker/angular.Dockerfile does
+# `COPY package*.json` -> `npm ci` -> `COPY spring-petclinic-angular/ ./`.
+# A host-side node_modules in the context would clobber the freshly installed
+# tree in that second COPY.
+#
+# DO NOT add a `**/*.jar` pattern: it would strip
+# spring-petclinic-rest/.mvn/wrapper/maven-wrapper.jar and break the REST build
+# with a very confusing error.
+
+.git
+**/.git
+**/node_modules
+**/target
+**/dist
+**/.angular
+**/out-tsc
+**/coverage
+spring-petclinic-angular/docs
+tests/test-results
+tests/playwright-report
+tests/blob-report
+**/*.log
+
+.env
+.env.*
+!.env.example
