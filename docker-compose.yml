@@ -1,4 +1,4 @@
-name: petclinic-e2e
+name: petclinic
 
 services:
   postgres:
