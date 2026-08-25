@@ -16,6 +16,10 @@ while getopts ":d" opt; do
   esac
 done
 
+source ./docker/bootstrap.sh
+ensure_submodules
+ensure_env_file
+
 if [ "$DETACHED" = true ]; then
   docker compose up --build -d postgres rest angular
 else
