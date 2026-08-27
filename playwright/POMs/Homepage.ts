@@ -1,4 +1,4 @@
-import BasePage from "@POMs/BasePage";
+import BasePage from "@components/BasePage";
 import {Page} from "@playwright/test";
 
 export default class Homepage extends BasePage {
@@ -8,7 +8,7 @@ export default class Homepage extends BasePage {
     }
 
     getTitle() {
-        return this.page.getByRole('heading', { level: 2 });
+        return this.page.getByRole('heading', { level: 1 });
     }
 
 }

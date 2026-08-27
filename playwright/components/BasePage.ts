@@ -1,4 +1,4 @@
-import { Page } from "@playwright/test";
+import { Locator, Page } from "@playwright/test";
 
 export default abstract class BasePage {
 
@@ -13,4 +13,6 @@ export default abstract class BasePage {
     async goto() {
         await this.page.goto(this.pageUrl);
     }
+
+    abstract getTitle(): Locator;
 }
